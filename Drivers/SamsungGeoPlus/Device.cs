@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace stac2mqtt.Drivers.SamsungGeoPlus
+﻿namespace stac2mqtt.Drivers.SamsungGeoPlus
 {
     public class Device : IDevice
     {

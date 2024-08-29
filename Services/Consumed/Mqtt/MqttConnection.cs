@@ -51,7 +51,16 @@ namespace stac2mqtt.Services.Consumed.Mqtt
         {
             var mqttFactory = new MqttFactory();
             var mqttClient = mqttFactory.CreateMqttClient();
-            var mqttClientOptions = new MqttClientOptionsBuilder().WithTcpServer(configuration.MqttServer).Build();
+
+            var mqttClientOptionsBuilder = new MqttClientOptionsBuilder().WithTcpServer(configuration.MqttServer);
+
+            if (configuration.Mqtt.Username != null)
+            {
+                mqttClientOptionsBuilder.WithCredentials(configuration.Mqtt.Username, configuration.Mqtt.Password);
+            }
+
+            var mqttClientOptions = mqttClientOptionsBuilder.Build();
+
             var response = await mqttClient.ConnectAsync(mqttClientOptions, CancellationToken.None);
 
             Log.Information("The MQTT client is connected.");

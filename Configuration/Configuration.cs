@@ -17,5 +17,7 @@ namespace stac2mqtt.Configuration
 
         public string ThisAppName { get; set; } = "stac2mqtt";
         public string ThisVersion { get; set; } = "1.0.0";
+
+        public MqttConfiguration Mqtt { get; set; } = new MqttConfiguration();
     }
 }

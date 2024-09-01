@@ -21,7 +21,13 @@ namespace stac2mqtt.Services.Consumed.Mqtt
 
         public void Setup()
         {
-            mqttClient = ConnectMqttClient().Result;
+            mqttClient = ConnectMqttClient().Result;            
+        }
+
+        public async void EnsureConnected()
+        { 
+            if (!mqttClient.IsConnected)
+                await mqttClient.ReconnectAsync();
         }
 
         public void SubscribeToTopicChanges(string topic)

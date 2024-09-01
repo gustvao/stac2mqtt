@@ -333,6 +333,8 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
                 {
                     try
                     {
+                        mqttConnection.EnsureConnected();   // Ecosystem just not stable enough, make sure mqtt connection is up before doing the refresh.
+
                         TriggerUpdateSensors(deviceId);
                         Task.Delay(configuration.Intervals.UpdateDelay, cancellationToken).Wait();
                         UpdateState(deviceId);

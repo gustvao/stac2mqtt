@@ -83,7 +83,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             dynamic status = stDeviceStatus;
 
             var statusSignatureRecognized = (status["ocf"].n.value == "Samsung-Room-Air-Conditioner") &&
-                                             (status["execute"].data.value.payload["x.com.samsung.da.description"] == "ARA-WW-TP1-22-COMMON");
+                                             (((string)(status["ocf"].mnfv.value)).Contains("ARA-WW-TP1-22-COMMON"));
 
             return statusSignatureRecognized;
         }

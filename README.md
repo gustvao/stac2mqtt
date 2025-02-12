@@ -52,7 +52,8 @@ docker run --detach --env MqttServer=10.10.10.11 --env DeviceIds__0=aaaaaaaa-222
 - Why not just use [Home Assistant Smartthings Integration](https://www.home-assistant.io/integrations/smartthings/)? More maintenance and higher security risk needed in setting up a reverse proxy.
 - Once a local network only mod is created for the Samsung Wifi control modules, it will be easy to modify this bridge and keep automations/config in Home Assistant the same. Gets you off the hostile internet and less migration work.
 - Other devices can be added by creating extra drivers. An example is in the Drivers/SamsungGeoPlus folder. Some exploration of supported SmartThings attributes and behaviours are needed. The framework automatically detects new drivers by checking for classes that implement IDriver.
- 
+- Use https://my.smartthings.com/advanced/devices to check if devices are registered and are responding to commands.
+
 ## License
 
 The MIT License (MIT)

@@ -94,10 +94,29 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
 
             var newDevice = new Device();
             newDevice.DeviceID = stDeviceId;
-            newDevice.SerialNumber = status["execute"].data.value.payload["x.com.samsung.da.serialNum"];
-            newDevice.TemperatureUOM = status["temperatureMeasurement"].temperature.unit;
-            newDevice.MinTemperature = status["custom.thermostatSetpointControl"].minimumSetpoint.value;
-            newDevice.MaxTemperature = status["custom.thermostatSetpointControl"].maximumSetpoint.value;
+
+            var serialNumber = (string)(status["execute"]?.data?.value?.payload["x.com.samsung.da.serialNum"] ?? string.Empty);
+
+            if (!string.IsNullOrWhiteSpace(serialNumber))
+            {
+                newDevice.SerialNumber = serialNumber;
+                newDevice.TemperatureUOM = status.temperatureMeasurement?.temperature?.unit;
+                newDevice.MinTemperature = status["custom.thermostatSetpointControl"]?.minimumSetpoint?.value;
+                newDevice.MaxTemperature = status["custom.thermostatSetpointControl"]?.maximumSetpoint?.value;
+            }
+            else
+            {
+                // Extract serial number from device info with null checks
+                newDevice.SerialNumber = status.ocf?.mnmn?.value + "-" + status.ocf?.di?.value;
+
+                // Get temperature unit from temperatureMeasurement capability with default
+                newDevice.TemperatureUOM = status.temperatureMeasurement?.temperature?.unit ?? "C";
+
+                // Get temperature limits with null checks and defaults
+                newDevice.MinTemperature = status["custom.thermostatSetpointControl"]?.minimumSetpoint?.value ?? 16;
+                newDevice.MaxTemperature = status["custom.thermostatSetpointControl"]?.maximumSetpoint?.value ?? 30;
+            }
+
             newDevice.Driver = this;
 
             return newDevice;

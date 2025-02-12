@@ -91,7 +91,10 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         public IDevice RegisterDevice(string stDeviceId, JObject stDeviceStatus)
         {
             dynamic status = stDeviceStatus;
-
+        
+            // Debug print the full JSON response
+            // Console.WriteLine($"SmartThings API Response JSON: {stDeviceStatus.ToString()}");
+        
             var newDevice = new Device();
             newDevice.DeviceID = stDeviceId;
 
@@ -118,7 +121,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             }
 
             newDevice.Driver = this;
-
+        
             return newDevice;
         }
 

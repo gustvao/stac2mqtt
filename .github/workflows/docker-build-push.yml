@@ -36,6 +36,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            gustvao/stac2mqtt:latest
-            gustvao/stac2mqtt:${{ steps.get_version.outputs.VERSION }}
-
+            ${{ github.repository_owner }}/stac2mqtt:latest
+            ${{ github.repository_owner }}/stac2mqtt:${{ steps.get_version.outputs.VERSION }}

@@ -36,6 +36,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             PublishNewTempSensorDeviceForHA((Device)device);
             PublishNewHumiditySensorDeviceForHA((Device)device);
             PublishNewEnergySensorDeviceForHA((Device)device);
+            PublishNewLEDDisplaySwitchDeviceForHA((Device)device);
 
             UpdateState(device.DeviceID);
 
@@ -45,6 +46,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             mqttConnection.SubscribeToTopicChanges(GetTopic(device.DeviceID, ETopic.SetState));
             mqttConnection.SubscribeToTopicChanges(GetTopic(device.DeviceID, ETopic.SetPresetMode));
             mqttConnection.SubscribeToTopicChanges(GetTopic(device.DeviceID, ETopic.SetTargetTemperature));
+            mqttConnection.SubscribeToTopicChanges(GetTopic(device.DeviceID, ETopic.SetLEDDisplayMode));
         }
 
         public void ClearHADeviceRegistrations(IDevice device)
@@ -53,6 +55,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             PublishClearDeviceForHA(ETopic.HATempSensorConfig, device.DeviceID);
             PublishClearDeviceForHA(ETopic.HAEnergySensorConfig, device.DeviceID);
             PublishClearDeviceForHA(ETopic.HAClimateConfig, device.DeviceID);
+            PublishClearDeviceForHA(ETopic.HALEDDisplaySwitchConfig, device.DeviceID);
         }
 
         public void DispatchMqttMessage(IDevice device, string topic, string newValue)
@@ -63,6 +66,8 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
                 SetFanMode(deviceId, newValue);
             else if (topic == GetTopic(deviceId, ETopic.SetState))
                 SetState(deviceId, newValue);
+            else if (topic == GetTopic(deviceId, ETopic.SetLEDDisplayMode))
+                SetLEDDisplay(deviceId, newValue);
             else if (topic == GetTopic(deviceId, ETopic.SetPresetMode))
                 SetOptionalMode(deviceId, newValue);
             else if (topic == GetTopic(deviceId, ETopic.SetTargetTemperature))
@@ -98,7 +103,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             var newDevice = new Device();
             newDevice.DeviceID = stDeviceId;
 
-            var serialNumber = (string)(status["execute"]?.data?.value?.payload["x.com.samsung.da.serialNum"] ?? string.Empty);
+            var serialNumber = (string)(status?["execute"]?.data?.value?.payload?["x.com.samsung.da.serialNum"] ?? string.Empty);
 
             if (!string.IsNullOrWhiteSpace(serialNumber))
             {
@@ -183,6 +188,8 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
                     return $"{configuration.HomeAssistant.HaDiscoveryTopicPrefix}/sensor/{deviceId}_humidity/config";
                 case ETopic.HAEnergySensorConfig:
                     return $"{configuration.HomeAssistant.HaDiscoveryTopicPrefix}/sensor/{deviceId}_energy/config";
+                case ETopic.HALEDDisplaySwitchConfig:
+                    return $"{configuration.HomeAssistant.HaDiscoveryTopicPrefix}/switch/{deviceId}_led_display/config";
                 case ETopic.SetState:
                     return $"{configuration.ThisAppName}/hvac/{deviceId}/mode/set";
                 case ETopic.GetState:
@@ -215,6 +222,10 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
                     return $"{configuration.ThisAppName}/hvac/{deviceId}/autocleaning";
                 case ETopic.GetTotalEnergyUsed:
                     return $"{configuration.ThisAppName}/hvac/{deviceId}/energy_used";
+                case ETopic.SetLEDDisplayMode:
+                    return $"{configuration.ThisAppName}/hvac/{deviceId}/led_display/set";
+                case ETopic.GetLEDDisplayMode:
+                    return $"{configuration.ThisAppName}/hvac/{deviceId}/led_display";
                 default:
                     throw new NotSupportedException($"Topic not supported: '{topic}'");
             }
@@ -257,6 +268,37 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             mqttConnection.SendMessage(topic, configPayload, true);
         }
 
+        void PublishNewSwitchDeviceForHA(Device device, ETopic deviceTopic, ETopic getStateTopic, ETopic setTopic, string name, string idName)
+        {
+            var topic = GetTopic(device.DeviceID, deviceTopic);
+
+            var configPayload = $@"
+    {{ 
+        ""name"":""{name}"",
+        ""unique_id"" : ""{device.DeviceID}_{idName}"",
+        ""sw_version"" : ""{configuration.ThisVersion}"",
+        ""device_class"" : ""switch"",
+        ""state_topic"" : ""{GetTopic(device.DeviceID, getStateTopic)}"",
+        ""command_topic"" : ""{GetTopic(device.DeviceID, setTopic)}"",
+        ""payload_on"" : ""on"",
+        ""payload_off"" : ""off"",
+        ""state_on"" : ""on"",
+        ""state_off"" : ""off"",
+        ""optimistic"" : ""true"",
+        ""device"" : 
+        {{
+            ""model"" : ""Geo Plus"",
+            ""name"" : ""Airconditioner"",
+            ""manufacturer"" : ""Samsung"",
+            ""suggested_area"" : ""Bedroom"",
+            ""via_device"" : ""{configuration.ThisAppName}"",
+            ""identifiers"" : [""{device.SerialNumber}""]
+        }}
+    }}";
+
+            mqttConnection.SendMessage(topic, configPayload, true);
+        }
+
         public void PublishNewHumiditySensorDeviceForHA(Device device)
         {
             PublishNewSensorDeviceForHA(device, ETopic.HAHumiditySensorConfig, ETopic.GetHumidity, "measurement", "humidity", "%", "Humidity");
@@ -264,7 +306,12 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
 
         public void PublishNewEnergySensorDeviceForHA(Device device)
         {
-            PublishNewSensorDeviceForHA(device, ETopic.HAEnergySensorConfig, ETopic.GetTotalEnergyUsed, "measurement", "energy", "Wh", "Total Energy"); 
+            PublishNewSensorDeviceForHA(device, ETopic.HAEnergySensorConfig, ETopic.GetTotalEnergyUsed, "measurement", "energy", "Wh", "Total Energy");
+        }
+        
+        public void PublishNewLEDDisplaySwitchDeviceForHA(Device device)
+        {
+            PublishNewSwitchDeviceForHA(device, ETopic.HALEDDisplaySwitchConfig, ETopic.GetLEDDisplayMode, ETopic.SetLEDDisplayMode, "LED Display", "ledDisplaySwitch");
         }
 
         public void PublishNewTempSensorDeviceForHA(Device device)
@@ -286,6 +333,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             var autoCleaningMode = response["custom.autoCleaningMode"].autoCleaningMode.value;
             var switchState = response["switch"].@switch.value;
             var energyUsed = response["powerConsumptionReport"].powerConsumption.value.persistedEnergy;
+            var ledDisplayStatus = response["samsungce.airConditionerLighting"].lighting.value; 
 
             if (switchState == "off")
             {
@@ -338,6 +386,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             SendPayload(deviceId, ETopic.GetTargetTemperature, $@"{thermostatCoolingSetpoint}");
             SendPayload(deviceId, ETopic.GetAutoCleaning, $@"{autoCleaningMode}");
             SendPayload(deviceId, ETopic.GetTotalEnergyUsed, $@"{energyUsed}");
+            SendPayload(deviceId, ETopic.GetLEDDisplayMode, $@"{ledDisplayStatus}");
         }
 
         private void SendPayload(string deviceId, ETopic topic, string payload)
@@ -496,6 +545,30 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
               ""arguments"": [
                 ""{newValue.ToLower()}""
               ]
+            }},
+            {{
+              ""component"": ""main"",
+              ""capability"": ""refresh"",
+              ""command"": ""refresh"",
+              ""arguments"": []
+            }}
+          ]
+        }}    
+        ";
+
+            smartThingsConnection.SendCommands(deviceId, commands);
+        }
+
+        void SetLEDDisplay(string deviceId, string newValue)
+        {
+            var commands = string.Empty;
+            commands = $@"
+        {{
+          ""commands"": [
+            {{
+              ""component"": ""main"",
+              ""capability"": ""samsungce.airConditionerLighting"",
+              ""command"": ""{newValue.ToLower()}""              
             }},
             {{
               ""component"": ""main"",

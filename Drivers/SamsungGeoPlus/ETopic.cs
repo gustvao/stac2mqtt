@@ -12,6 +12,7 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         HATempSensorConfig,
         HAHumiditySensorConfig,
         HAEnergySensorConfig,
+        HALEDDisplaySwitchConfig,
         SetState,
         GetState,
         GetHumidity,
@@ -28,6 +29,8 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         GetCurrentAction,
         SetAutoCleaning,
         GetAutoCleaning,
-        GetTotalEnergyUsed
+        GetTotalEnergyUsed,
+        SetLEDDisplayMode,
+        GetLEDDisplayMode
     }
 }

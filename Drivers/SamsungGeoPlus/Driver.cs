@@ -95,38 +95,47 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
 
         public IDevice RegisterDevice(string stDeviceId, JObject stDeviceStatus)
         {
-            dynamic status = stDeviceStatus;
-        
-            // Debug print the full JSON response
-            // Console.WriteLine($"SmartThings API Response JSON: {stDeviceStatus.ToString()}");
-        
+            // Remove dynamic magic and use SelectToken.
+            // This will attempt to find execute.data.value.payload safely.
+            var payloadToken = stDeviceStatus.SelectToken("execute.data.value.payload");
+
+            string serialNumber = string.Empty;
+            if (payloadToken != null)
+            {
+                if (payloadToken.Type == JTokenType.Object)
+                {
+                    // If payload is a JObject, get the property "x.com.samsung.da.serialNum"
+                    serialNumber = payloadToken.Value<string>("x.com.samsung.da.serialNum") ?? string.Empty;
+                }
+                else
+                {
+                    // Otherwise, if it's a simple value, convert it to string.
+                    serialNumber = payloadToken.Value<string>() ?? string.Empty;
+                }
+            }
+
             var newDevice = new Device();
             newDevice.DeviceID = stDeviceId;
-
-            var serialNumber = (string)(status?["execute"]?.data?.value?.payload?["x.com.samsung.da.serialNum"] ?? string.Empty);
 
             if (!string.IsNullOrWhiteSpace(serialNumber))
             {
                 newDevice.SerialNumber = serialNumber;
-                newDevice.TemperatureUOM = status.temperatureMeasurement?.temperature?.unit;
-                newDevice.MinTemperature = status["custom.thermostatSetpointControl"]?.minimumSetpoint?.value;
-                newDevice.MaxTemperature = status["custom.thermostatSetpointControl"]?.maximumSetpoint?.value;
+                newDevice.TemperatureUOM = stDeviceStatus.SelectToken("temperatureMeasurement.temperature.unit")?.Value<string>();
+                newDevice.MinTemperature = stDeviceStatus.SelectToken("custom.thermostatSetpointControl.minimumSetpoint.value")?.Value<double>() ?? 16;
+                newDevice.MaxTemperature = stDeviceStatus.SelectToken("custom.thermostatSetpointControl.maximumSetpoint.value")?.Value<double>() ?? 30;
             }
             else
             {
-                // Extract serial number from device info with null checks
-                newDevice.SerialNumber = status.ocf?.mnmn?.value + "-" + status.ocf?.di?.value;
-
-                // Get temperature unit from temperatureMeasurement capability with default
-                newDevice.TemperatureUOM = status.temperatureMeasurement?.temperature?.unit ?? "C";
-
-                // Get temperature limits with null checks and defaults
-                newDevice.MinTemperature = status["custom.thermostatSetpointControl"]?.minimumSetpoint?.value ?? 16;
-                newDevice.MaxTemperature = status["custom.thermostatSetpointControl"]?.maximumSetpoint?.value ?? 30;
+                // Fallback: build serial number from other properties
+                string mnmn = stDeviceStatus.SelectToken("ocf.mnmn.value")?.Value<string>();
+                string di = stDeviceStatus.SelectToken("ocf.di.value")?.Value<string>();
+                newDevice.SerialNumber = $"{mnmn}-{di}";
+                newDevice.TemperatureUOM = stDeviceStatus.SelectToken("temperatureMeasurement.temperature.unit")?.Value<string>() ?? "C";
+                newDevice.MinTemperature = stDeviceStatus.SelectToken("custom.thermostatSetpointControl.minimumSetpoint.value")?.Value<double>() ?? 16;
+                newDevice.MaxTemperature = stDeviceStatus.SelectToken("custom.thermostatSetpointControl.maximumSetpoint.value")?.Value<double>() ?? 30;
             }
 
             newDevice.Driver = this;
-        
             return newDevice;
         }
 

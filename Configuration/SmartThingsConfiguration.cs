@@ -4,5 +4,6 @@
     {
         public string APIBaseURL { get; set; } = "https://api.smartthings.com/v1/devices";
         public string ApiToken { get; set; }
+        public string RefreshToken { get; set; }
     }
 }

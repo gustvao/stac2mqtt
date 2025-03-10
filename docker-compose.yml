@@ -1,0 +1,14 @@
+version: '3'
+services:
+  stac2mqtt-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5001:5000"
+    volumes:
+      - .:/stac2mqtt
+      - ./data:/data
+    env_file:
+      - ./.env
+    restart: unless-stopped

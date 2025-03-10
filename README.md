@@ -12,12 +12,15 @@ To be run as a docker instance (tested on Linux host, Windows should work if you
 
 ### Required:
 
-1. SmartThings account and [personal access token](https://developer.smartthings.com/docs/advanced/authorization-and-permissions/) 
+1. SmartThings account with OAuth2 credentials:
+   - Personal access token (initial)
+   - Refresh token (initial)
+   - Base64 encoded client credentials (`clientId:clientSecret`)
 2. DeviceId(s) of the devices to control
 3. Server address of an MQTT broker (e.g. [mosquitto](https://mosquitto.org/)) requiring no credentials
 4. [Working Docker host](https://www.tutorialspoint.com/docker/docker_installation.htm)
 
-### Example:
+### Example with OAuth2 token refresh:
 
 - SmartThings personal access token = 66666666-7777-8888-9999-000000000000
 - MQTT server IP = 10.10.10.11
@@ -25,7 +28,7 @@ To be run as a docker instance (tested on Linux host, Windows should work if you
 - Desired docker instance name = stac2mqtt
 
 ```bash
-docker run --detach --env MqttServer=10.10.10.11 --env DeviceIds__0=11111111-2222-3333-4444-555555555555 --env SmartThings__ApiToken=66666666-7777-8888-9999-000000000000 --name stac2mqtt mybura/stac2mqtt:latest
+docker run --detach --env MqttServer=10.10.10.11 --env DeviceIds__0=11111111-2222-3333-4444-555555555555 --env SmartThings__ApiToken=66666666-7777-8888-9999-000000000000 --env SmartThings__RefreshToken=initial-refresh-token --env SmartThings__ClientCredentials=base64-encoded-credentials --name stac2mqtt mybura/stac2mqtt:latest
 ```
 
 ## More Examples
@@ -41,7 +44,7 @@ For each additional device, just add 1 to the DeviceIds__xxxx environment variab
 - Desired docker instance name = stac2mqtt
 
 ```bash
-docker run --detach --env MqttServer=10.10.10.11 --env DeviceIds__0=aaaaaaaa-2222-3333-4444-555555555555 --env DeviceIds__1=bbbbbbbb-2222-3333-4444-555555555555 --env SmartThings__ApiToken=66666666-7777-8888-9999-000000000000 --name stac2mqtt mybura/stac2mqtt:latest
+docker run --detach --env MqttServer=10.10.10.11 --env DeviceIds__0=aaaaaaaa-2222-3333-4444-555555555555 --env DeviceIds__1=bbbbbbbb-2222-3333-4444-555555555555 --env SmartThings__ApiToken=66666666-7777-8888-9999-000000000000 --env SmartThings__RefreshToken=initial-refresh-token --env SmartThings__ClientCredentials=base64-encoded-credentials --name stac2mqtt mybura/stac2mqtt:latest
 ```
 
 ## Notes

@@ -1,7 +1,7 @@
 {
-  "AccessToken": "1fe494ef-637b-4699-85d0-2b16c8e77397",
-  "RefreshToken": "043d1646-2f18-43b1-bd97-fd25daf9f0eb",
-  "ClientId": "1510741a-fbda-4f3e-b740-3f225124f7ee",
-  "ClientSecret": "d551ab62-751b-46a7-abc9-e1f192ef49eb",
+  "AccessToken": "YOUR_ACCESS_TOKEN",
+  "RefreshToken": "YOUR_REFRESH_TOKEN",
+  "ClientId": "YOUR_CLIENT_ID",
+  "ClientSecret": "YOUR_CLIENT_SECRET",
   "LastUpdated": "2025-03-10T22:55:10.9532504Z"
 }

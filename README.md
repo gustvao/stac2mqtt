@@ -8,19 +8,21 @@ Currently only supports Samsung Geo+ models.
 
 ## Usage
 
-To be run as a docker instance (tested on Linux host, Windows should work if you build a Windows image using this repo)
+To be run as a docker instance (tested on Linux host and Mac OS with Docker (see docker-compose.yml), Windows should work if you build a Windows image using this repo)
 
 ### Required:
 
-1. SmartThings account with OAuth2 credentials:
-   - Personal access token (initial)
-   - Refresh token (initial)
-   - Base64 encoded client credentials (`clientId:clientSecret`)
+1. SmartThings account:
+   - Personal access token (if your Personal Access Token was created before 1st January 2025)
+   - Refresh token, clientId and clientSecret (if your Personal Access Token was created after 1st January 2025) - [more information on how to generate client_id and client_secret](https://github.com/SmartThingsCommunity/api-app-subscription-example-js/tree/master)
+   - After you successfully get your clientId and clientSecret, type this in your browser: https://api.smartthings.com/oauth/authorize?client_id={{client_id}}&response_type=code&redirect_uri={{redirect_uri}}. Make sure redirect_uri is the same as the one you provided when you created your OAuth app. It does not need to work. After you finish the authorization, there will be a code in the URL. Copy that code to use in the next step.
+   - With the code, redirect_uri, clientId and clientSecret you can fetch the access token and refresh token with a POST to https://auth-global.api.smartthings.com/oauth/token?grant_type=authorization_code&redirect_uri={{redirect_uri}}&code={{code}}. Don't forget to use Base Auth with your clientId and clientSecret. I recommend using Postman to do this.
+   - Add the access token and refresh token to the data/smartthings_tokens.json file.
 2. DeviceId(s) of the devices to control
 3. Server address of an MQTT broker (e.g. [mosquitto](https://mosquitto.org/)) requiring no credentials
 4. [Working Docker host](https://www.tutorialspoint.com/docker/docker_installation.htm)
 
-### Example with OAuth2 token refresh:
+### Example:
 
 - SmartThings personal access token = 66666666-7777-8888-9999-000000000000
 - MQTT server IP = 10.10.10.11
@@ -52,6 +54,7 @@ docker run --detach --env MqttServer=10.10.10.11 --env DeviceIds__0=aaaaaaaa-222
 - The code can be run as an executable. Just download this repo and build/run it from Visual Studio 2022.
 - Additional settings are available, see the Configuration class.
 - Supports Settings.json instead of environment variable configuration.
+- Token persistence: Access and refresh tokens are automatically stored and managed by the application.
 - Why not just use [Home Assistant Smartthings Integration](https://www.home-assistant.io/integrations/smartthings/)? More maintenance and higher security risk needed in setting up a reverse proxy.
 - Once a local network only mod is created for the Samsung Wifi control modules, it will be easy to modify this bridge and keep automations/config in Home Assistant the same. Gets you off the hostile internet and less migration work.
 - Other devices can be added by creating extra drivers. An example is in the Drivers/SamsungGeoPlus folder. Some exploration of supported SmartThings attributes and behaviours are needed. The framework automatically detects new drivers by checking for classes that implement IDriver.

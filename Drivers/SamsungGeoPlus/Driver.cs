@@ -6,6 +6,7 @@ using stac2mqtt.Services.Consumed.Mqtt;
 using Serilog;
 using CaseExtensions;
 using stac2mqtt.Services.Consumed.SmartThings;
+using System.Linq;
 
 namespace stac2mqtt.Drivers.SamsungGeoPlus
 {
@@ -142,10 +143,14 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         public void PublishNewHVACDeviceForHA(Device device)
         {
             var deviceId = device.DeviceID;
+            var deviceConfig = configuration.Devices.FirstOrDefault(d => d.DeviceId == deviceId);
+            var deviceName = deviceConfig?.Name ?? "Airconditioner";
+            var deviceArea = deviceConfig?.Area ?? "Bedroom";
+            
             var topic = GetTopic(device.DeviceID, ETopic.HAClimateConfig);
             var configPayload = $@"
     {{ 
-        ""name"":""Airconditioner"",
+        ""name"":""{deviceName}"",
         ""unique_id"" : ""{deviceId}"",
         ""sw_version"" : ""{configuration.ThisVersion}"",
         ""mode_command_topic"" : ""{GetTopic(deviceId, ETopic.SetState)}"",
@@ -174,9 +179,9 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         ""device"" : 
         {{
             ""model"" : ""Geo Plus"",
-            ""name"" : ""Airconditioner"",
+            ""name"" : ""{deviceName}"",
             ""manufacturer"" : ""Samsung"",
-            ""suggested_area"" : ""Bedroom"",
+            ""suggested_area"" : ""{deviceArea}"",
             ""via_device"" : ""{configuration.ThisAppName}"",
             ""identifiers"" : [""{device.SerialNumber}""]
         }}
@@ -251,6 +256,11 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
 
         void PublishNewSensorDeviceForHA(Device device, ETopic deviceTopic, ETopic stateTopic, string sensorClass, string deviceClass, string uom, string name)
         {
+            var deviceId = device.DeviceID;
+            var deviceConfig = configuration.Devices.FirstOrDefault(d => d.DeviceId == deviceId);
+            var deviceName = deviceConfig?.Name ?? "Airconditioner";
+            var deviceArea = deviceConfig?.Area ?? "Bedroom";
+            
             var topic = GetTopic(device.DeviceID, deviceTopic);
 
             var configPayload = $@"
@@ -266,9 +276,9 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         ""device"" : 
         {{
             ""model"" : ""Geo Plus"",
-            ""name"" : ""Airconditioner"",
+            ""name"" : ""{deviceName}"",
             ""manufacturer"" : ""Samsung"",
-            ""suggested_area"" : ""Bedroom"",
+            ""suggested_area"" : ""{deviceArea}"",
             ""via_device"" : ""{configuration.ThisAppName}"",
             ""identifiers"" : [""{device.SerialNumber}""]
         }}
@@ -279,6 +289,11 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
 
         void PublishNewSwitchDeviceForHA(Device device, ETopic deviceTopic, ETopic getStateTopic, ETopic setTopic, string name, string idName)
         {
+            var deviceId = device.DeviceID;
+            var deviceConfig = configuration.Devices.FirstOrDefault(d => d.DeviceId == deviceId);
+            var deviceName = deviceConfig?.Name ?? "Airconditioner";
+            var deviceArea = deviceConfig?.Area ?? "Bedroom";
+
             var topic = GetTopic(device.DeviceID, deviceTopic);
 
             var configPayload = $@"
@@ -297,9 +312,9 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         ""device"" : 
         {{
             ""model"" : ""Geo Plus"",
-            ""name"" : ""Airconditioner"",
+            ""name"" : ""{deviceName}"",
             ""manufacturer"" : ""Samsung"",
-            ""suggested_area"" : ""Bedroom"",
+            ""suggested_area"" : ""{deviceArea}"",
             ""via_device"" : ""{configuration.ThisAppName}"",
             ""identifiers"" : [""{device.SerialNumber}""]
         }}

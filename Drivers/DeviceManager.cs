@@ -44,8 +44,9 @@ namespace stac2mqtt.Drivers
             deviceIds.ForEach(deviceId =>
             {
                 var device = devices.Single(x => x.DeviceID == deviceId);
+                var deviceConfig = configuration.Devices.FirstOrDefault(d => d.DeviceId == deviceId);
 
-                Log.Information($"Configuring device '{deviceId}'.");
+                Log.Information($"Configuring device '{deviceId}' - {deviceConfig?.Name ?? "Unnamed"}.");
 
                 device.Driver.ClearHADeviceRegistrations(device);
                 device.Driver.PublishNewHADevices(device);

@@ -79,7 +79,7 @@ namespace stac2mqtt
             
             Log.Information("Configuration loaded from settings.json. MQTT Server: {Server}, Device Count: {Count}", 
                 configuration.MqttServer, 
-                configuration.DeviceIds?.Count ?? 0);
+                configuration.Devices?.Count ?? 0);
         }
     }
 }

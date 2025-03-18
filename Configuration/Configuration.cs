@@ -19,5 +19,6 @@ namespace stac2mqtt.Configuration
         public string ThisVersion { get; set; } = "1.0.0";
 
         public MqttConfiguration Mqtt { get; set; } = new MqttConfiguration();
+        public DateTime TokenLastUpdated { get; set; } = DateTime.UtcNow;
     }
 }

@@ -40,6 +40,7 @@ namespace stac2mqtt
         private static void SetupDI(HostApplicationBuilder builder)
         {
             builder.Services.AddSingleton<MqttConnection>();
+            builder.Services.AddSingleton<stac2mqtt.Configuration.ConfigurationManager>();
             builder.Services.AddSingleton<SmartThingsConnection>();
             builder.Services.AddSingleton<DriverManager>();
             builder.Services.AddSingleton<DeviceManager>();
@@ -58,19 +59,27 @@ namespace stac2mqtt
 
         private static void GetSettings(string[] args, HostApplicationBuilder builder)
         {
-            // Configure where configuration is retrieved from
-            builder.Configuration.Sources.Clear();
-            builder.Configuration.AddJsonFile("settings.json", optional: true, reloadOnChange: true);
+            // Load settings.json first (lowest priority)
+            builder.Configuration.AddJsonFile("settings.json", optional: true);
+            
+            // Then environment variables (will override settings.json)
             builder.Configuration.AddEnvironmentVariables();
-
-            if (args is { Length: > 0 })
-            {
-                builder.Configuration.AddCommandLine(args);
-            }
-
-            // Register the configuration with DI
-            var configuration = builder.Configuration.Get<Configuration.Configuration>();
+            
+            // Command line arguments (highest priority)
+            builder.Configuration.AddCommandLine(args);
+            
+            // Bind the configuration to our Configuration class
+            var configuration = new Configuration.Configuration();
+            builder.Configuration.Bind(configuration);
+            
+            // Register Configuration and ConfigurationManager as singletons
             builder.Services.AddSingleton(configuration);
+            
+            // ConfigurationManager is already registered in SetupDI
+            
+            Log.Information("Configuration loaded from settings.json. MQTT Server: {Server}, Device Count: {Count}", 
+                configuration.MqttServer, 
+                configuration.DeviceIds?.Count ?? 0);
         }
     }
 }

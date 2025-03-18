@@ -1,0 +1,29 @@
+{
+  "MqttServer": "10.223.10.14",
+  "SmartThings": {
+    "APIBaseURL": "https://api.smartthings.com/v1/devices",
+    "ApiToken": "17e2448e-4dc4-49c2-9463-566893dc28fb",
+    "RefreshToken": "edf9919d-b025-4dd6-aefb-a6329ea7363d",
+    "ClientId": "1510741a-fbda-4f3e-b740-3f225124f7ee",
+    "ClientSecret": "d551ab62-751b-46a7-abc9-e1f192ef49eb",
+    "Code": null
+  },
+  "HomeAssistant": {
+    "HaDiscoveryTopicPrefix": "homeassistant"
+  },
+  "Intervals": {
+    "UpdateDelay": 5000,
+    "UpdateInterval": 300000
+  },
+  "DeviceIds": [
+    "1e9489dd-7e6c-419f-06e5-a92cf1c421c8",
+    "df46cc40-9a51-c672-fe92-c3416ac9d422"
+  ],
+  "ThisAppName": "stac2mqtt",
+  "ThisVersion": "1.0.0",
+  "Mqtt": {
+    "Username": "hass",
+    "Password": "hass"
+  },
+  "TokenLastUpdated": "2025-03-18T18:10:33.5947954Z"
+}

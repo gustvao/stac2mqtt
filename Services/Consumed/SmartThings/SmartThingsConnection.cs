@@ -7,73 +7,22 @@ using System.Threading.Tasks;
 using Serilog;
 using System.Linq;
 using System.Collections.Generic;
+using stac2mqtt.Configuration;
 
 namespace stac2mqtt.Services.Consumed.SmartThings
 {
     public class SmartThingsConnection
     {
         private Configuration.Configuration configuration { get; }
+        private readonly ConfigurationManager configurationManager;
         private const string TOKEN_ENDPOINT = "https://auth-global.api.smartthings.com/oauth/token";
         private readonly HttpClient httpClient;
-        private readonly TokenPersistenceService tokenPersistenceService;
-        private string clientId;
-        private string clientSecret;
 
-        public SmartThingsConnection(Configuration.Configuration configuration)
+        public SmartThingsConnection(Configuration.Configuration configuration, ConfigurationManager configurationManager)
         {
             this.configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            this.configurationManager = configurationManager ?? throw new ArgumentNullException(nameof(configurationManager));
             this.httpClient = new HttpClient();
-            this.tokenPersistenceService = new TokenPersistenceService();
-            
-            // Load tokens from persistent storage on startup
-            LoadPersistedTokensAsync().Wait();
-        }
-
-        private async Task LoadPersistedTokensAsync()
-        {
-            var (accessToken, refreshToken, clientId, clientSecret) = await tokenPersistenceService.LoadTokensAsync();
-            
-            if (!string.IsNullOrEmpty(accessToken) && !string.IsNullOrEmpty(refreshToken))
-            {
-                configuration.SmartThings.ApiToken = accessToken;
-                configuration.SmartThings.RefreshToken = refreshToken;
-                this.clientId = clientId;
-                this.clientSecret = clientSecret;
-                Log.Information("Loaded tokens from persistent storage");
-            }
-            else
-            {
-                Log.Information("No persisted tokens found, checking environment variables...");
-                
-                // Try to get values from environment variables 
-                var envClientId = Environment.GetEnvironmentVariable("SmartThings__ClientId");
-                var envClientSecret = Environment.GetEnvironmentVariable("SmartThings__ClientSecret");
-                
-                if (!string.IsNullOrEmpty(envClientId) && !string.IsNullOrEmpty(envClientSecret))
-                {
-                    this.clientId = envClientId;
-                    this.clientSecret = envClientSecret;
-                    Log.Information("Loaded client credentials from environment variables");
-                    
-                    // Save to persistent storage for future use
-                    await tokenPersistenceService.SaveClientCredentialsAsync(envClientId, envClientSecret);
-                }
-                
-                if (!string.IsNullOrEmpty(configuration.SmartThings.ApiToken) && 
-                    !string.IsNullOrEmpty(configuration.SmartThings.RefreshToken))
-                {
-                    // Save the initial tokens from configuration to persistent storage
-                    await tokenPersistenceService.SaveTokensAsync(
-                        configuration.SmartThings.ApiToken,
-                        configuration.SmartThings.RefreshToken,
-                        this.clientId,
-                        this.clientSecret);
-                }
-                else
-                {
-                    Log.Warning("No tokens found in persistent storage or environment variables!");
-                }
-            }
         }
 
         public dynamic GetDeviceStatus(string deviceId)
@@ -89,122 +38,73 @@ namespace stac2mqtt.Services.Consumed.SmartThings
             }
             catch (Exception ex)
             {
-                // Check if it's a 401 error (look for inner FlurlHttpException)
-                var flurlEx = ex as FlurlHttpException;
-                if (flurlEx == null && ex is AggregateException aggEx)
+                Log.Error(ex, "Error retrieving device status for {DeviceId}: {Message}", deviceId, ex.Message);
+                
+                if (ex.InnerException?.Message?.Contains("401") == true)
                 {
-                    flurlEx = aggEx.InnerExceptions.FirstOrDefault() as FlurlHttpException;
+                    Log.Information("Token expired, attempting to refresh...");
+                    RefreshAccessToken().Wait();
+                    return GetDeviceStatus(deviceId); // Retry after token refresh
                 }
                 
-                if (flurlEx != null && flurlEx.StatusCode == 401)
-                {
-                    // Token expired, attempt refresh
-                    Log.Information("API token expired, attempting to refresh...");
-                    try
-                    {
-                        RefreshAccessTokenAsync().Wait();
-                        
-                        // Retry with new token
-                        Log.Information("Retrying request with new token...");
-                        string result = $"{configuration.SmartThings.APIBaseURL}/{deviceId}/components/main/status"
-                            .WithHeader("Authorization", $"Bearer {configuration.SmartThings.ApiToken}")
-                            .GetStringAsync()
-                            .Result;
-                        
-                        return JsonConvert.DeserializeObject<dynamic>(result);
-                    }
-                    catch (Exception refreshEx)
-                    {
-                        Log.Error(refreshEx, "Failed to refresh token and retry request");
-                        throw;
-                    }
-                }
-                
-                // Not a 401 or refresh failed
-                Log.Error(ex, $"Failed to get device status for {deviceId}");
-                throw;
+                return null;
             }
         }
 
-        public void SendCommands(string deviceId, string commandsJson)
+        public dynamic SendCommands(string deviceId, string commands)
         {
             try
             {
-                var url = $@"{configuration.SmartThings.APIBaseURL}/{deviceId}/commands";
-                var json = url.WithHeader("Authorization", $"Bearer {configuration.SmartThings.ApiToken}")
-                              .PostStringAsync(commandsJson)
-                              .Result
-                              .ResponseMessage
-                              .Content
-                              .ReadAsStringAsync()
-                              .Result;
+                string result = $"{configuration.SmartThings.APIBaseURL}/{deviceId}/commands"
+                    .WithHeader("Authorization", $"Bearer {configuration.SmartThings.ApiToken}")
+                    .PostStringAsync(commands)
+                    .Result
+                    .GetStringAsync()
+                    .Result;
+                
+                return JsonConvert.DeserializeObject<dynamic>(result);
             }
-            catch (FlurlHttpException ex)
+            catch (Exception ex)
             {
-                if (ex.StatusCode == 401)
+                Log.Error(ex, "Error sending commands to {DeviceId}: {Message}", deviceId, ex.Message);
+                
+                if (ex.InnerException?.Message?.Contains("401") == true)
                 {
-                    // Token expired, refresh and retry
+                    Log.Information("Token expired, attempting to refresh...");
                     RefreshAccessToken().Wait();
-                    
-                    // Retry with new token
-                    var url = $@"{configuration.SmartThings.APIBaseURL}/{deviceId}/commands";
-                    var json = url.WithHeader("Authorization", $"Bearer {configuration.SmartThings.ApiToken}")
-                                  .PostStringAsync(commandsJson)
-                                  .Result
-                                  .ResponseMessage
-                                  .Content
-                                  .ReadAsStringAsync()
-                                  .Result;
+                    return SendCommands(deviceId, commands); // Retry after token refresh
                 }
-                else
-                {
-                    throw;
-                }
+                
+                return null;
             }
         }
 
         private async Task RefreshAccessTokenAsync()
         {
-            try {
-                Log.Information("Starting token refresh process...");
-                
-                // Check for required values
-                if (string.IsNullOrEmpty(configuration.SmartThings.RefreshToken))
-                {
-                    Log.Error("Cannot refresh token: RefreshToken is missing from configuration");
-                    throw new InvalidOperationException("RefreshToken is missing from configuration");
-                }
+            try
+            {
+                var clientId = configuration.SmartThings.ClientId;
+                var clientSecret = configuration.SmartThings.ClientSecret;
                 
                 if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
                 {
-                    Log.Error("Cannot refresh token: ClientId or ClientSecret is missing");
-                    throw new InvalidOperationException("ClientId or ClientSecret is missing");
+                    Log.Error("Client ID or Client Secret missing. Cannot refresh token.");
+                    throw new InvalidOperationException("Client credentials required for token refresh");
                 }
-                
-                Log.Information("Using client ID: {ClientId}", clientId);
-                
-                // Construct the full URL with query parameters
-                string fullUrl = $"{TOKEN_ENDPOINT}?grant_type=refresh_token&refresh_token={Uri.EscapeDataString(configuration.SmartThings.RefreshToken)}";
-                Log.Information("Request URL: {Url}", fullUrl);
-                
-                // Create the HTTP request with empty body
-                var request = new HttpRequestMessage(HttpMethod.Post, fullUrl);
-                
-                // Add Basic auth header with client ID and secret
-                var base64Auth = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", base64Auth);
-                
-                Log.Information("Request method: POST");
-                Log.Information("Request headers: Authorization: Basic {Auth}", base64Auth);
-                Log.Information("Request body: <empty>");
-                
-                // Send the request
-                var response = await httpClient.SendAsync(request);
+
+                var content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["grant_type"] = "refresh_token",
+                    ["refresh_token"] = configuration.SmartThings.RefreshToken,
+                    ["client_id"] = clientId
+                });
+
+                var auth = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{clientId}:{clientSecret}"));
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", auth);
+
+                var response = await httpClient.PostAsync(TOKEN_ENDPOINT, content);
                 var responseContent = await response.Content.ReadAsStringAsync();
-                
-                Log.Information("Token refresh response status: {StatusCode}", response.StatusCode);
-                Log.Information("Token refresh response: {Response}", responseContent);
-                
+
                 if (response.IsSuccessStatusCode)
                 {
                     var tokenResponse = JsonConvert.DeserializeObject<dynamic>(responseContent);
@@ -212,14 +112,10 @@ namespace stac2mqtt.Services.Consumed.SmartThings
                     var newAccessToken = tokenResponse.access_token.ToString();
                     var newRefreshToken = tokenResponse.refresh_token.ToString();
                     
-                    Log.Information("New access token: {AccessToken}", newAccessToken);
-                    Log.Information("New refresh token: {RefreshToken}", newRefreshToken);
+                    Log.Information("New access token obtained");
                     
-                    configuration.SmartThings.ApiToken = newAccessToken;
-                    configuration.SmartThings.RefreshToken = newRefreshToken;
-                    
-                    await tokenPersistenceService.SaveTokensAsync(newAccessToken, newRefreshToken, clientId, clientSecret);
-                    Log.Information("Successfully refreshed access token and saved to persistent storage");
+                    // Save updated tokens directly to settings.json using ConfigurationManager
+                    await configurationManager.SaveTokensAsync(newAccessToken, newRefreshToken);
                 }
                 else
                 {
@@ -237,6 +133,57 @@ namespace stac2mqtt.Services.Consumed.SmartThings
         private Task RefreshAccessToken()
         {
             return RefreshAccessTokenAsync();
+        }
+
+        public async Task TryAuthorizationCodeFlowAsync(string code, string redirectUri)
+        {
+            try
+            {
+                var clientId = configuration.SmartThings.ClientId;
+                var clientSecret = configuration.SmartThings.ClientSecret;
+                
+                if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
+                {
+                    Log.Error("Client ID or Secret missing. Cannot exchange authorization code for token.");
+                    return;
+                }
+
+                var content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["grant_type"] = "authorization_code",
+                    ["code"] = code,
+                    ["client_id"] = clientId,
+                    ["redirect_uri"] = redirectUri
+                });
+
+                var auth = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{clientId}:{clientSecret}"));
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", auth);
+
+                var response = await httpClient.PostAsync(TOKEN_ENDPOINT, content);
+                var responseContent = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var tokenResponse = JsonConvert.DeserializeObject<dynamic>(responseContent);
+                    
+                    var accessToken = tokenResponse.access_token.ToString();
+                    var refreshToken = tokenResponse.refresh_token.ToString();
+                    
+                    // Save tokens and code to settings.json
+                    await configurationManager.SaveTokensAsync(accessToken, refreshToken, clientId, clientSecret, code);
+                    
+                    Log.Information("Authorization code exchanged for tokens");
+                }
+                else
+                {
+                    Log.Error("Failed to exchange code for token: {StatusCode}, Response: {Response}", 
+                        response.StatusCode, responseContent);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error in authorization code flow: {Message}", ex.Message);
+            }
         }
     }
 }

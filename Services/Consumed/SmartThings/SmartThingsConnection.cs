@@ -134,56 +134,5 @@ namespace stac2mqtt.Services.Consumed.SmartThings
         {
             return RefreshAccessTokenAsync();
         }
-
-        public async Task TryAuthorizationCodeFlowAsync(string code, string redirectUri)
-        {
-            try
-            {
-                var clientId = configuration.SmartThings.ClientId;
-                var clientSecret = configuration.SmartThings.ClientSecret;
-                
-                if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
-                {
-                    Log.Error("Client ID or Secret missing. Cannot exchange authorization code for token.");
-                    return;
-                }
-
-                var content = new FormUrlEncodedContent(new Dictionary<string, string>
-                {
-                    ["grant_type"] = "authorization_code",
-                    ["code"] = code,
-                    ["client_id"] = clientId,
-                    ["redirect_uri"] = redirectUri
-                });
-
-                var auth = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{clientId}:{clientSecret}"));
-                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", auth);
-
-                var response = await httpClient.PostAsync(TOKEN_ENDPOINT, content);
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var tokenResponse = JsonConvert.DeserializeObject<dynamic>(responseContent);
-                    
-                    var accessToken = tokenResponse.access_token.ToString();
-                    var refreshToken = tokenResponse.refresh_token.ToString();
-                    
-                    // Save tokens and code to settings.json
-                    await configurationManager.SaveTokensAsync(accessToken, refreshToken, clientId, clientSecret, code);
-                    
-                    Log.Information("Authorization code exchanged for tokens");
-                }
-                else
-                {
-                    Log.Error("Failed to exchange code for token: {StatusCode}, Response: {Response}", 
-                        response.StatusCode, responseContent);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error in authorization code flow: {Message}", ex.Message);
-            }
-        }
     }
 }

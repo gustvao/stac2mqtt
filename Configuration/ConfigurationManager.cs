@@ -1,65 +1,62 @@
-using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json;
-using Serilog;
 using System;
 using System.IO;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+// using Microsoft.Extensions.Configuration;
+// using Newtonsoft.Json;
+using Serilog;
 using System.Threading.Tasks;
 
 namespace stac2mqtt.Configuration
 {
+    /// <summary>
+    /// Manages configuration persistence for the application.
+    /// This class handles saving configuration changes back to the settings file.
+    /// Initial loading is handled by ASP.NET Core's configuration system.
+    /// </summary>
     public class ConfigurationManager
     {
-        private readonly string _configFilePath;
         private readonly Configuration _configuration;
+        private readonly string _configFilePath;
         
-        public ConfigurationManager(Configuration configuration, string configFilePath = "settings.json")
+        /// <summary>
+        /// Initializes a new instance of the ConfigurationManager class.
+        /// </summary>
+        /// <param name="configuration">Configuration object populated by ASP.NET Core's configuration system</param>
+        /// <param name="configFilePath">Path to the settings file</param>
+        public ConfigurationManager(Configuration configuration, string configFilePath = "data/settings.json")
         {
-            _configuration = configuration;
+            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _configFilePath = configFilePath;
         }
-        
-        public async Task SaveConfigurationAsync()
+
+
+        /// <summary>
+        /// Saves the current configuration to the settings file.
+        /// </summary>
+        public void SaveConfiguration()
         {
-            try
+            var options = new JsonSerializerOptions
             {
-                var json = JsonConvert.SerializeObject(_configuration, Formatting.Indented);
-                await File.WriteAllTextAsync(_configFilePath, json);
-                Log.Information("Configuration saved to {ConfigFilePath}", _configFilePath);
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to save configuration to {ConfigFilePath}", _configFilePath);
-            }
+                WriteIndented = true,
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+            };
+
+            string jsonString = JsonSerializer.Serialize(_configuration, options);
+            File.WriteAllText(_configFilePath, jsonString);
         }
-        
-        public async Task SaveTokensAsync(string accessToken, string refreshToken, string clientId = null, string clientSecret = null, string code = null)
+
+        /// <summary>
+        /// Saves all SmartThings authentication information to the configuration file.
+        /// </summary>
+        public async Task SaveTokensAsync(string accessToken, string refreshToken)
         {
-            try
-            {
-                if (!string.IsNullOrEmpty(accessToken))
-                    _configuration.SmartThings.ApiToken = accessToken;
-                    
-                if (!string.IsNullOrEmpty(refreshToken))
-                    _configuration.SmartThings.RefreshToken = refreshToken;
-                    
-                if (!string.IsNullOrEmpty(clientId))
-                    _configuration.SmartThings.ClientId = clientId;
-                    
-                if (!string.IsNullOrEmpty(clientSecret))
-                    _configuration.SmartThings.ClientSecret = clientSecret;
-                    
-                if (!string.IsNullOrEmpty(code))
-                    _configuration.SmartThings.Code = code;
-                
-                _configuration.TokenLastUpdated = DateTime.UtcNow;
-                
-                await SaveConfigurationAsync();
-                Log.Information("Tokens successfully saved to settings file");
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to save tokens to settings file");
-            }
+            _configuration.SmartThings.ApiToken = accessToken;
+            _configuration.SmartThings.RefreshToken = refreshToken;
+            _configuration.TokenLastUpdated = DateTime.UtcNow;
+            
+            await Task.Run(() => SaveConfiguration());
         }
+
     }
-} 
+}

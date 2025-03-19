@@ -6,6 +6,50 @@ Using Home Assistant UI, one can monitor the ambient temperature, humidity and c
 
 Currently only supports Samsung Geo+ models.
 
+## Configuration 
+
+The application can be configured through:
+
+1. A `data/settings.json` file with structured device configurations:
+   ```json
+   {
+     "MqttServer": "10.10.10.11",
+     "Devices": [
+       {
+         "DeviceId": "11111111-2222-3333-4444-555555555555",
+         "Name": "Living Room AC",
+         "Area": "living_room"
+       },
+       {
+         "DeviceId": "22222222-2222-3333-4444-555555555555",
+         "Name": "Bedroom AC",
+         "Area": "bedroom"
+       }
+     ],
+     "SmartThings": {
+       "ApiToken": "66666666-7777-8888-9999-000000000000",
+       "RefreshToken": "refresh-token-value",
+       "ClientId": "client-id-value",
+       "ClientSecret": "client-secret-value"
+     }
+   }
+   ```
+
+2. Environment variables (with nested structures supported):
+   ```bash
+   docker run --detach \
+     --env MqttServer=10.10.10.11 \
+     --env Devices__0__DeviceId=11111111-2222-3333-4444-555555555555 \
+     --env Devices__0__Name="Living Room AC" \
+     --env Devices__0__Area=living_room \
+     --env Devices__1__DeviceId=22222222-2222-3333-4444-555555555555 \
+     --env Devices__1__Name="Bedroom AC" \
+     --env Devices__1__Area=bedroom \
+     --env SmartThings__ApiToken=66666666-7777-8888-9999-000000000000 \
+     --env SmartThings__RefreshToken=refresh-token-value \
+     --name stac2mqtt mybura/stac2mqtt:latest
+   ```
+
 ## Usage
 
 To be run as a docker instance (tested on Linux host and Mac OS with Docker (see docker-compose.yml), Windows should work if you build a Windows image using this repo)

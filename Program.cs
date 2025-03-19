@@ -60,7 +60,7 @@ namespace stac2mqtt
         private static void GetSettings(string[] args, HostApplicationBuilder builder)
         {
             // Load settings.json first (lowest priority)
-            builder.Configuration.AddJsonFile("settings.json", optional: true);
+            builder.Configuration.AddJsonFile("data/settings.json", optional: false, reloadOnChange: false);
             
             // Then environment variables (will override settings.json)
             builder.Configuration.AddEnvironmentVariables();
@@ -68,18 +68,20 @@ namespace stac2mqtt
             // Command line arguments (highest priority)
             builder.Configuration.AddCommandLine(args);
             
-            // Bind the configuration to our Configuration class
-            var configuration = new Configuration.Configuration();
-            builder.Configuration.Bind(configuration);
-            
-            // Register Configuration and ConfigurationManager as singletons
-            builder.Services.AddSingleton(configuration);
-            
-            // ConfigurationManager is already registered in SetupDI
-            
+            // Bind configuration to strongly typed object
+            var appConfig = new Configuration.Configuration();
+            builder.Configuration.Bind(appConfig);
+
+            // Register as singleton for dependency injection
+            builder.Services.AddSingleton(appConfig);
+
+            // Register ConfigurationManager with the bound configuration
+            builder.Services.AddSingleton(new Configuration.ConfigurationManager(appConfig));
+
+            // Log configuration info
             Log.Information("Configuration loaded from settings.json. MQTT Server: {Server}, Device Count: {Count}", 
-                configuration.MqttServer, 
-                configuration.Devices?.Count ?? 0);
+                appConfig.MqttServer, 
+                appConfig.Devices?.Count ?? 0);
         }
     }
 }

@@ -1,15 +1,15 @@
 {
-  "MqttServer": "10.223.10.14",
+  "MqttServer": "your-mqtt-server",
   "Mqtt": {
-    "Username": "hass",
-    "Password": "hass"
+    "Username": "your-mqtt-username",
+    "Password": "your-mqtt-password"
   },
   "SmartThings": {
     "APIBaseURL": "https://api.smartthings.com/v1/devices",
-    "ApiToken": "17e2448e-4dc4-49c2-9463-566893dc28",
-    "RefreshToken": "148834d3-8594-4923-b6c2-c3fe0b67110a",
-    "ClientId": "1510741a-fbda-4f3e-b740-3f225124f7ee",
-    "ClientSecret": "d551ab62-751b-46a7-abc9-e1f192ef49eb",
+    "ApiToken": "your-smartthings-api-token",
+    "RefreshToken": "your-smartthings-refresh-token",
+    "ClientId": "your-smartthings-client-id",
+    "ClientSecret": "your-smartthings-client-secret",
     "Code": null
   },
   "HomeAssistant": {
@@ -21,14 +21,14 @@
   },
   "Devices": [
     {
-      "DeviceId": "1e9489dd-7e6c-419f-06e5-a92cf1c421c8",
-      "Name": "ac_quarto",
-      "Area": "quarto"
+      "DeviceId": "your-device-id",
+      "Name": "your-device-name",
+      "Area": "your-device-area"
     },
     {
-      "DeviceId": "df46cc40-9a51-c672-fe92-c3416ac9d422",
-      "Name": "ac_thomaz",
-      "Area": "thomaz"
+      "DeviceId": "your-device-id",
+      "Name": "your-device-name",
+      "Area": "your-device-area"
     }
   ]
 }

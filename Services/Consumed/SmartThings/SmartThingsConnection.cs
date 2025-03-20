@@ -8,6 +8,7 @@ using Serilog;
 using System.Linq;
 using System.Collections.Generic;
 using stac2mqtt.Configuration;
+using System.Threading;
 
 namespace stac2mqtt.Services.Consumed.SmartThings
 {
@@ -17,6 +18,11 @@ namespace stac2mqtt.Services.Consumed.SmartThings
         private readonly ConfigurationManager configurationManager;
         private const string TOKEN_ENDPOINT = "https://auth-global.api.smartthings.com/oauth/token";
         private readonly HttpClient httpClient;
+        
+        // Semaphore to ensure only one token refresh happens at a time
+        private static SemaphoreSlim _tokenRefreshSemaphore = new SemaphoreSlim(1, 1);
+        // Flag to track if a token refresh is in progress
+        private static bool _tokenRefreshInProgress = false;
 
         public SmartThingsConnection(Configuration.Configuration configuration, ConfigurationManager configurationManager)
         {
@@ -81,8 +87,33 @@ namespace stac2mqtt.Services.Consumed.SmartThings
 
         private async Task RefreshAccessTokenAsync()
         {
+            // Only proceed if no token refresh is in progress
+            if (_tokenRefreshInProgress)
+            {
+                Log.Information("Token refresh already in progress. Waiting for completion...");
+                
+                // Wait until the existing refresh operation completes
+                while (_tokenRefreshInProgress)
+                {
+                    await Task.Delay(100);
+                }
+                
+                return; // Token has been refreshed by another request
+            }
+            
+            // Try to enter the semaphore to ensure only one refresh happens at a time
+            await _tokenRefreshSemaphore.WaitAsync();
+            
             try
             {
+                // Double-check if another thread has refreshed the token while we were waiting
+                if (_tokenRefreshInProgress)
+                {
+                    return; // Another thread is already refreshing
+                }
+                
+                _tokenRefreshInProgress = true;
+                
                 var clientId = configuration.SmartThings.ClientId;
                 var clientSecret = configuration.SmartThings.ClientSecret;
                 
@@ -127,6 +158,12 @@ namespace stac2mqtt.Services.Consumed.SmartThings
             {
                 Log.Error(ex, "Error refreshing access token: {Message}", ex.Message);
                 throw;
+            }
+            finally
+            {
+                // Reset the flag and release the semaphore
+                _tokenRefreshInProgress = false;
+                _tokenRefreshSemaphore.Release();
             }
         }
 

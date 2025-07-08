@@ -59,14 +59,21 @@ namespace stac2mqtt.Services.Consumed.SmartThings
 
         public dynamic SendCommands(string deviceId, string commands)
         {
+            return SendCommandsWithRetry(deviceId, commands, 0).Result;
+        }
+
+        private async Task<dynamic> SendCommandsWithRetry(string deviceId, string commands, int retryCount)
+        {
+            const int maxRetries = 3;
+            var baseDelayMs = configuration.Intervals.CommandRetryDelay; // Use configurable delay
+
             try
             {
-                string result = $"{configuration.SmartThings.APIBaseURL}/{deviceId}/commands"
+                string result = await $"{configuration.SmartThings.APIBaseURL}/{deviceId}/commands"
                     .WithHeader("Authorization", $"Bearer {configuration.SmartThings.ApiToken}")
                     .PostStringAsync(commands)
                     .Result
-                    .GetStringAsync()
-                    .Result;
+                    .GetStringAsync();
                 
                 return JsonConvert.DeserializeObject<dynamic>(result);
             }
@@ -74,11 +81,30 @@ namespace stac2mqtt.Services.Consumed.SmartThings
             {
                 Log.Error(ex, "Error sending commands to {DeviceId}: {Message}", deviceId, ex.Message);
                 
+                // Handle 401 Unauthorized (token expired)
                 if (ex.InnerException?.Message?.Contains("401") == true)
                 {
                     Log.Information("Token expired, attempting to refresh...");
-                    RefreshAccessToken().Wait();
-                    return SendCommands(deviceId, commands); // Retry after token refresh
+                    await RefreshAccessTokenAsync();
+                    return await SendCommandsWithRetry(deviceId, commands, retryCount); // Retry after token refresh
+                }
+                
+                // Handle 409 Conflict (rate limiting or device busy)
+                if (ex.InnerException?.Message?.Contains("409") == true)
+                {
+                    if (retryCount < maxRetries)
+                    {
+                        var delayMs = baseDelayMs * (int)Math.Pow(2, retryCount); // Exponential backoff
+                        Log.Warning("Received 409 Conflict for device {DeviceId}, retrying in {Delay}ms (attempt {RetryCount}/{MaxRetries})", 
+                            deviceId, delayMs, retryCount + 1, maxRetries);
+                        
+                        await Task.Delay(delayMs);
+                        return await SendCommandsWithRetry(deviceId, commands, retryCount + 1);
+                    }
+                    else
+                    {
+                        Log.Error("Max retries reached for device {DeviceId} after 409 conflicts. Giving up.", deviceId);
+                    }
                 }
                 
                 return null;

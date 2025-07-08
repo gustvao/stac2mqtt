@@ -17,7 +17,13 @@
   },
   "Intervals": {
     "UpdateDelay": 5000,
-    "UpdateInterval": 180000
+    "UpdateInterval": 180000,
+    "CommandRetryDelay": 10000,
+    "DeviceSetupDelay": 10000,
+    "DeviceRefreshStartDelay": 5000,
+    "RefreshLoopStartDelay": 30000,
+    "LongUpdateInterval": 600000,
+    "ErrorRetryDelay": 10000
   },
   "Devices": [
     {

@@ -7,6 +7,7 @@ using Serilog;
 using CaseExtensions;
 using stac2mqtt.Services.Consumed.SmartThings;
 using System.Linq;
+using System.Collections.Concurrent;
 
 namespace stac2mqtt.Drivers.SamsungGeoPlus
 {
@@ -15,6 +16,9 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         private MqttConnection mqttConnection;
         private SmartThingsConnection smartThingsConnection;
         private Configuration.Configuration configuration;
+        
+        // Semaphore per device to prevent concurrent commands
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> DeviceSemaphores = new ConcurrentDictionary<string, SemaphoreSlim>();
 
         public void UseSmartThingsConnection(SmartThingsConnection smartThingsConnection)
         {
@@ -39,8 +43,14 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             PublishNewEnergySensorDeviceForHA((Device)device);
             PublishNewLEDDisplaySwitchDeviceForHA((Device)device);
 
+            // Wait before doing any device operations to let the device settle
+            Task.Delay(configuration.Intervals.DeviceSetupDelay).Wait();
+            
             UpdateState(device.DeviceID);
 
+            // Wait longer before starting the refresh loop
+            Task.Delay(configuration.Intervals.DeviceRefreshStartDelay).Wait();
+            
             RunRefreshLoop(device.DeviceID, CancellationToken.None);
 
             mqttConnection.SubscribeToTopicChanges(GetTopic(device.DeviceID, ETopic.SetFanMode));
@@ -74,13 +84,23 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
             else if (topic == GetTopic(deviceId, ETopic.SetTargetTemperature))
                 SetTargetTemperature(deviceId, ((int)double.Parse(newValue)).ToString());
 
-            Task.Run(() =>
+            // Update state with longer delays to allow device to process commands
+            Task.Run(async () =>
             {
-                UpdateState(deviceId);
-                Thread.Sleep(500);
-                UpdateState(deviceId);
-                Thread.Sleep(1500);
-                UpdateState(deviceId);
+                try
+                {
+                    // Wait for device to process the command
+                    await Task.Delay(2000);
+                    UpdateState(deviceId);
+                    
+                    // Wait longer before second update
+                    await Task.Delay(3000);
+                    UpdateState(deviceId);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error updating state after command dispatch for device {DeviceId}: {Message}", deviceId, ex.Message);
+                }
             });
         }
 
@@ -424,20 +444,24 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         {
             Task.Run(() =>
             {
+                // Wait before starting the loop to let device settle
+                Task.Delay(configuration.Intervals.RefreshLoopStartDelay, cancellationToken).Wait();
+                
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     try
                     {
                         mqttConnection.EnsureConnected();   // Ecosystem just not stable enough, make sure mqtt connection is up before doing the refresh.
 
-                        TriggerUpdateSensors(deviceId);
-                        Task.Delay(configuration.Intervals.UpdateDelay, cancellationToken).Wait();
+                        // Only update state (read-only operation) - no commands initially
                         UpdateState(deviceId);
-                        Task.Delay(configuration.Intervals.UpdateInterval, cancellationToken).Wait();
+                        
+                        // Wait for a much longer interval between updates (10 minutes instead of 3)
+                        Task.Delay(configuration.Intervals.LongUpdateInterval, cancellationToken).Wait();
                     }
                     catch (Exception ex)
                     {
-                        Thread.Sleep(100);
+                        Thread.Sleep(configuration.Intervals.ErrorRetryDelay); // Configurable wait on error
                         Log.Error(ex, "Unexpected error while refreshing device state.");
                     }
                 }
@@ -446,7 +470,16 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
 
         void TriggerUpdateSensors(string deviceId)
         {
-            var commands = $@"
+            var semaphore = GetDeviceSemaphore(deviceId);
+            
+            Task.Run(async () =>
+            {
+                try
+                {
+                    // Wait for exclusive access to this device
+                    await semaphore.WaitAsync();
+                    
+                    var commands = $@"
         {{
           ""commands"": [
             {{
@@ -464,21 +497,44 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
           ]
         }}";
 
-            smartThingsConnection.SendCommands(deviceId, commands);
+                    var result = smartThingsConnection.SendCommands(deviceId, commands);
+                    if (result == null)
+                    {
+                        Log.Warning("Failed to trigger sensor update for device {DeviceId}", deviceId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error triggering sensor update for device {DeviceId}: {Message}", deviceId, ex.Message);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
         }
 
         void SetState(string deviceId, string newValue)
         {
-            var acMode = newValue;
-            if (acMode == "fan_only")
+            var semaphore = GetDeviceSemaphore(deviceId);
+            
+            Task.Run(async () =>
             {
-                acMode = "wind";
-            }
+                try
+                {
+                    // Wait for exclusive access to this device
+                    await semaphore.WaitAsync();
+                    
+                    var acMode = newValue;
+                    if (acMode == "fan_only")
+                    {
+                        acMode = "wind";
+                    }
 
-            var commands = string.Empty;
-            if (acMode == "off")
-            {
-                commands = $@"
+                    var commands = string.Empty;
+                    if (acMode == "off")
+                    {
+                        commands = $@"
             {{
               ""commands"": [
                 {{
@@ -495,10 +551,10 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
                 }}
               ]
             }}";
-            }
-            else
-            {
-                commands = $@"
+                    }
+                    else
+                    {
+                        commands = $@"
             {{
               ""commands"": [
                 {{
@@ -524,15 +580,31 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
               ]
             }}    
             ";
-            }
+                    }
 
-            smartThingsConnection.SendCommands(deviceId, commands);
+                    var result = smartThingsConnection.SendCommands(deviceId, commands);
+                    if (result == null)
+                    {
+                        Log.Warning("Failed to set state to '{State}' for device {DeviceId}", newValue, deviceId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Error setting state to '{State}' for device {DeviceId}: {Message}", newValue, deviceId, ex.Message);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
         }
 
         void SetTargetTemperature(string deviceId, string newValue)
         {
-            var commands = string.Empty;
-            commands = $@"
+            try
+            {
+                var commands = string.Empty;
+                commands = $@"
         {{
           ""commands"": [
             {{
@@ -553,13 +625,24 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         }}    
         ";
 
-            smartThingsConnection.SendCommands(deviceId, commands);
+                var result = smartThingsConnection.SendCommands(deviceId, commands);
+                if (result == null)
+                {
+                    Log.Warning("Failed to set target temperature to '{Temperature}' for device {DeviceId}", newValue, deviceId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error setting target temperature to '{Temperature}' for device {DeviceId}: {Message}", newValue, deviceId, ex.Message);
+            }
         }
 
         void SetFanMode(string deviceId, string newValue)
         {
-            var commands = string.Empty;
-            commands = $@"
+            try
+            {
+                var commands = string.Empty;
+                commands = $@"
         {{
           ""commands"": [
             {{
@@ -580,13 +663,24 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         }}    
         ";
 
-            smartThingsConnection.SendCommands(deviceId, commands);
+                var result = smartThingsConnection.SendCommands(deviceId, commands);
+                if (result == null)
+                {
+                    Log.Warning("Failed to set fan mode to '{FanMode}' for device {DeviceId}", newValue, deviceId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error setting fan mode to '{FanMode}' for device {DeviceId}: {Message}", newValue, deviceId, ex.Message);
+            }
         }
 
         void SetLEDDisplay(string deviceId, string newValue)
         {
-            var commands = string.Empty;
-            commands = $@"
+            try
+            {
+                var commands = string.Empty;
+                commands = $@"
         {{
           ""commands"": [
             {{
@@ -604,18 +698,29 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         }}    
         ";
 
-            smartThingsConnection.SendCommands(deviceId, commands);
+                var result = smartThingsConnection.SendCommands(deviceId, commands);
+                if (result == null)
+                {
+                    Log.Warning("Failed to set LED display to '{LEDMode}' for device {DeviceId}", newValue, deviceId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error setting LED display to '{LEDMode}' for device {DeviceId}: {Message}", newValue, deviceId, ex.Message);
+            }
         }
 
         void SetOptionalMode(string deviceId, string newValue)
         {
-            if (newValue == "boost")
-                newValue = "speed";
-            else if (newValue == "none")
-                newValue = "off";
+            try
+            {
+                if (newValue == "boost")
+                    newValue = "speed";
+                else if (newValue == "none")
+                    newValue = "off";
 
-            var commands = string.Empty;
-            commands = $@"
+                var commands = string.Empty;
+                commands = $@"
         {{
           ""commands"": [
             {{
@@ -636,7 +741,21 @@ namespace stac2mqtt.Drivers.SamsungGeoPlus
         }}    
         ";
 
-            smartThingsConnection.SendCommands(deviceId, commands);
+                var result = smartThingsConnection.SendCommands(deviceId, commands);
+                if (result == null)
+                {
+                    Log.Warning("Failed to set optional mode to '{OptionalMode}' for device {DeviceId}", newValue, deviceId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Error setting optional mode to '{OptionalMode}' for device {DeviceId}: {Message}", newValue, deviceId, ex.Message);
+            }
+        }
+
+        private SemaphoreSlim GetDeviceSemaphore(string deviceId)
+        {
+            return DeviceSemaphores.GetOrAdd(deviceId, _ => new SemaphoreSlim(1, 1));
         }
     }
 }
